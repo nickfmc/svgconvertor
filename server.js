@@ -11,6 +11,23 @@ const archiver = require('archiver');
 const { convertSvg } = require('./src/svgColorConverter');
 const os = require('os');
 
+// Create an in-memory cache to store converted SVGs
+// This mitigates the issue with /tmp directory on Vercel serverless functions
+const svgCache = new Map();
+
+// Modified convertSvg function that also caches results
+async function convertAndCacheSvg(svgContent, fileId) {
+  const convertedSvg = await convertSvg(svgContent);
+  if (process.env.VERCEL) {
+    // Store in cache with a unique key
+    svgCache.set(fileId, {
+      content: convertedSvg,
+      timestamp: Date.now()
+    });
+  }
+  return convertedSvg;
+}
+
 // Configure app
 const app = express();
 const port = process.env.PORT || 3000;
@@ -64,8 +81,8 @@ app.post('/convert/single', upload.single('svgFile'), async (req, res) => {
     // Read the uploaded SVG file
     const svgContent = await fs.readFile(req.file.path, 'utf8');
     
-    // Convert the SVG content
-    const convertedSvg = await convertSvg(svgContent);
+    // Convert the SVG content and cache it
+    const convertedSvg = await convertAndCacheSvg(svgContent, req.file.filename);
     
     // Save the converted SVG
     const outputPath = path.join(UPLOAD_DIR, `converted-${path.basename(req.file.path)}`);
@@ -93,7 +110,7 @@ app.post('/convert/multiple', upload.array('svgFiles', 10), async (req, res) => 
     const results = await Promise.all(
       req.files.map(async (file) => {
         const svgContent = await fs.readFile(file.path, 'utf8');
-        const convertedSvg = await convertSvg(svgContent);
+        const convertedSvg = await convertAndCacheSvg(svgContent, file.filename);
         const outputPath = path.join(UPLOAD_DIR, `converted-${path.basename(file.path)}`);
         await fs.writeFile(outputPath, convertedSvg);
         
@@ -116,16 +133,41 @@ app.get('/download/:filename', (req, res) => {
   const filename = req.params.filename;
   const filePath = path.join(UPLOAD_DIR, filename);
   
-  // Check if file exists
-  fs.access(filePath, fs.constants.F_OK, (err) => {
+  // First check if file exists in the filesystem
+  fs.access(filePath, fs.constants.F_OK, async (err) => {
     if (err) {
+      console.log('File not found in filesystem, checking cache...');
+      
+      // If on Vercel and file not found in filesystem, try to get from cache
+      if (process.env.VERCEL) {
+        // Extract the original filename (without the "converted-" prefix)
+        const originalFilename = filename.replace(/^converted-/, '');
+        
+        // Check if we have this file in our cache
+        if (svgCache.has(originalFilename)) {
+          console.log(`Found ${filename} in cache`);
+          const cachedSvg = svgCache.get(originalFilename);
+          
+          // Set proper headers for SVG download
+          res.setHeader('Content-Type', 'image/svg+xml');
+          res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+          
+          // Send the cached SVG content
+          return res.send(cachedSvg.content);
+        }
+        
+        console.error('File not found in cache either:', filename);
+        return res.status(404).send('File not found. It may have been deleted or expired.');
+      }
+      
       console.error('Error accessing file:', err);
       return res.status(404).send('File not found');
     }
     
+    // File exists in filesystem, proceed normally
     // Set proper headers for SVG download
     res.setHeader('Content-Type', 'image/svg+xml');
-    res.setHeader('Content-Disposition', `attachment; filename="converted-${filename}"`);
+    res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
     
     // Stream the file instead of using res.download
     const fileStream = fs.createReadStream(filePath);
@@ -250,7 +292,9 @@ app.get('/download-zip', async (req, res) => {
       // Find the first path that exists
       let filePath = null;
       let originalName = null;
+      let fileContent = null;
       
+      // First check the filesystem
       for (const possiblePath of possiblePaths) {
         console.log(`Checking if exists: ${possiblePath}`);
         if (fs.existsSync(possiblePath)) {
@@ -265,9 +309,27 @@ app.get('/download-zip', async (req, res) => {
         }
       }
       
+      // If file not found in filesystem but we're on Vercel, check the cache
+      if (!filePath && process.env.VERCEL) {
+        const rawFileId = fileId.replace(/^converted-/, '');
+        if (svgCache.has(rawFileId)) {
+          console.log(`File ${fileId} found in cache`);
+          fileContent = svgCache.get(rawFileId).content;
+          
+          // Use original filename from the request parameters or a default name
+          const rawName = path.basename(fileId).replace(/^converted-/, '');
+          originalName = req.query[fileId] || req.query[rawName] || `converted-${rawName}`;
+        }
+      }
+      
+      // Add the file to the archive - either from filesystem or from cache
       if (filePath) {
-        console.log(`Adding to ZIP: ${originalName} from ${filePath}`);
+        console.log(`Adding to ZIP from filesystem: ${originalName}`);
         archive.file(filePath, { name: originalName });
+        filesAdded++;
+      } else if (fileContent) {
+        console.log(`Adding to ZIP from cache: ${originalName}`);
+        archive.append(fileContent, { name: originalName });
         filesAdded++;
       } else {
         console.warn(`File not found for ID: ${fileId}`);
