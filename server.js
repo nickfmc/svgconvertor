@@ -18,6 +18,9 @@ const port = process.env.PORT || 3000;
 // Set up the uploads directory - use /tmp for Vercel serverless functions
 const UPLOAD_DIR = process.env.VERCEL ? path.join('/tmp') : path.join(__dirname, 'uploads');
 
+// Set path for public directory
+const PUBLIC_DIR = path.join(__dirname, 'public');
+
 // Ensure upload directory exists
 fs.ensureDirSync(UPLOAD_DIR);
 
@@ -49,7 +52,7 @@ const upload = multer({
 });
 
 // Serve static files from public directory
-app.use(express.static('public'));
+app.use(express.static(PUBLIC_DIR));
 
 // Single file upload route
 app.post('/convert/single', upload.single('svgFile'), async (req, res) => {
