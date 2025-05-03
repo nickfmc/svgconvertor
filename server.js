@@ -9,15 +9,22 @@ const fs = require('fs-extra');
 const { v4: uuidv4 } = require('uuid');
 const archiver = require('archiver');
 const { convertSvg } = require('./src/svgColorConverter');
+const os = require('os');
 
 // Configure app
 const app = express();
 const port = process.env.PORT || 3000;
 
+// Set up the uploads directory - use /tmp for Vercel serverless functions
+const UPLOAD_DIR = process.env.VERCEL ? path.join('/tmp') : path.join(__dirname, 'uploads');
+
+// Ensure upload directory exists
+fs.ensureDirSync(UPLOAD_DIR);
+
 // Configure storage for uploaded files
 const storage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, 'uploads/');
+    cb(null, UPLOAD_DIR);
   },
   filename: (req, file, cb) => {
     const uniqueId = uuidv4();
@@ -58,13 +65,13 @@ app.post('/convert/single', upload.single('svgFile'), async (req, res) => {
     const convertedSvg = await convertSvg(svgContent);
     
     // Save the converted SVG
-    const outputPath = path.join('uploads', `converted-${path.basename(req.file.path)}`);
+    const outputPath = path.join(UPLOAD_DIR, `converted-${path.basename(req.file.path)}`);
     await fs.writeFile(outputPath, convertedSvg);
     
     // Return the converted SVG file path
     res.json({
       originalName: req.file.originalname,
-      convertedPath: outputPath
+      convertedPath: path.basename(outputPath)
     });
   } catch (error) {
     console.error('Error processing file:', error);
@@ -84,12 +91,12 @@ app.post('/convert/multiple', upload.array('svgFiles', 10), async (req, res) => 
       req.files.map(async (file) => {
         const svgContent = await fs.readFile(file.path, 'utf8');
         const convertedSvg = await convertSvg(svgContent);
-        const outputPath = path.join('uploads', `converted-${path.basename(file.path)}`);
+        const outputPath = path.join(UPLOAD_DIR, `converted-${path.basename(file.path)}`);
         await fs.writeFile(outputPath, convertedSvg);
         
         return {
           originalName: file.originalname,
-          convertedPath: outputPath
+          convertedPath: path.basename(outputPath)
         };
       })
     );
@@ -104,7 +111,7 @@ app.post('/convert/multiple', upload.array('svgFiles', 10), async (req, res) => 
 // Route to download a converted file
 app.get('/download/:filename', (req, res) => {
   const filename = req.params.filename;
-  const filePath = path.join(__dirname, 'uploads', filename);
+  const filePath = path.join(UPLOAD_DIR, filename);
   
   // Check if file exists
   fs.access(filePath, fs.constants.F_OK, (err) => {
@@ -144,12 +151,9 @@ app.get('/download-zip', async (req, res) => {
     // Create a unique ID for the zip file
     const zipId = uuidv4();
     const zipFilename = `svg-converted-${zipId}.zip`;
-    const zipPath = path.join(__dirname, 'uploads', zipFilename);
+    const zipPath = path.join(UPLOAD_DIR, zipFilename);
     
     console.log(`ZIP will be created at: ${zipPath}`);
-    
-    // Create uploads folder if it doesn't exist
-    await fs.ensureDir(path.join(__dirname, 'uploads'));
     
     // Create a write stream for the zip file
     const output = fs.createWriteStream(zipPath);
@@ -231,13 +235,13 @@ app.get('/download-zip', async (req, res) => {
       // Options for where the file might be located
       const possiblePaths = [
         // Option 1: As is (already contains the full path with 'converted-' prefix)
-        path.join(__dirname, 'uploads', fileId),
+        path.join(UPLOAD_DIR, fileId),
         
         // Option 2: Just the ID portion without 'converted-' prefix
-        path.join(__dirname, 'uploads', `converted-${fileId.replace(/^converted-/, '')}`),
+        path.join(UPLOAD_DIR, `converted-${fileId.replace(/^converted-/, '')}`),
         
         // Option 3: Just as a raw ID
-        path.join(__dirname, 'uploads', `converted-${fileId}`)
+        path.join(UPLOAD_DIR, `converted-${fileId}`)
       ];
       
       // Find the first path that exists
@@ -313,16 +317,16 @@ app.post('/cleanup', express.json(), async (req, res) => {
         // Generate potential file paths to check and delete
         const potentialPaths = [
           // Original file as-is
-          path.join(__dirname, 'uploads', fileId),
+          path.join(UPLOAD_DIR, fileId),
           
           // With 'converted-' prefix if not already present
           fileId.startsWith('converted-') 
             ? null 
-            : path.join(__dirname, 'uploads', `converted-${fileId}`),
+            : path.join(UPLOAD_DIR, `converted-${fileId}`),
             
           // Without 'converted-' prefix if present
           fileId.startsWith('converted-') 
-            ? path.join(__dirname, 'uploads', fileId.substring(10)) 
+            ? path.join(UPLOAD_DIR, fileId.substring(10)) 
             : null
         ].filter(Boolean); // Remove null entries
         
@@ -345,25 +349,26 @@ app.post('/cleanup', express.json(), async (req, res) => {
     }
     
     // Also clean up any ZIP files older than 10 minutes
-    try {
-      const uploadsDir = path.join(__dirname, 'uploads');
-      const files = await fs.readdir(uploadsDir);
-      const tenMinutesAgo = Date.now() - (10 * 60 * 1000);
-      
-      for (const file of files) {
-        if (file.startsWith('svg-converted-') && file.endsWith('.zip')) {
-          const filePath = path.join(uploadsDir, file);
-          const stats = await fs.stat(filePath);
-          
-          if (stats.mtimeMs < tenMinutesAgo) {
-            await fs.unlink(filePath);
-            deletedFiles.push(file);
-            console.log(`Deleted old ZIP file: ${file}`);
+    if (!process.env.VERCEL) { // Skip this cleanup on Vercel as files are already temporary
+      try {
+        const files = await fs.readdir(UPLOAD_DIR);
+        const tenMinutesAgo = Date.now() - (10 * 60 * 1000);
+        
+        for (const file of files) {
+          if (file.startsWith('svg-converted-') && file.endsWith('.zip')) {
+            const filePath = path.join(UPLOAD_DIR, file);
+            const stats = await fs.stat(filePath);
+            
+            if (stats.mtimeMs < tenMinutesAgo) {
+              await fs.unlink(filePath);
+              deletedFiles.push(file);
+              console.log(`Deleted old ZIP file: ${file}`);
+            }
           }
         }
+      } catch (error) {
+        console.error('Error cleaning up old ZIP files:', error);
       }
-    } catch (error) {
-      console.error('Error cleaning up old ZIP files:', error);
     }
     
     res.json({
@@ -378,31 +383,34 @@ app.post('/cleanup', express.json(), async (req, res) => {
 });
 
 // Clean up uploads periodically (files older than 1 hour)
-const cleanupUploads = async () => {
-  try {
-    const uploadsDir = path.join(__dirname, 'uploads');
-    const files = await fs.readdir(uploadsDir);
-    
-    const oneHourAgo = Date.now() - (60 * 60 * 1000);
-    
-    for (const file of files) {
-      const filePath = path.join(uploadsDir, file);
-      const stats = await fs.stat(filePath);
+// Skip periodic cleanup on Vercel - /tmp is automatically cleaned
+if (!process.env.VERCEL) {
+  const cleanupUploads = async () => {
+    try {
+      const files = await fs.readdir(UPLOAD_DIR);
       
-      if (stats.mtimeMs < oneHourAgo) {
-        await fs.unlink(filePath);
-        console.log(`Deleted old file: ${file}`);
+      const oneHourAgo = Date.now() - (60 * 60 * 1000);
+      
+      for (const file of files) {
+        const filePath = path.join(UPLOAD_DIR, file);
+        const stats = await fs.stat(filePath);
+        
+        if (stats.mtimeMs < oneHourAgo) {
+          await fs.unlink(filePath);
+          console.log(`Deleted old file: ${file}`);
+        }
       }
+    } catch (error) {
+      console.error('Error cleaning up uploads:', error);
     }
-  } catch (error) {
-    console.error('Error cleaning up uploads:', error);
-  }
-};
+  };
 
-// Clean up uploads every hour
-setInterval(cleanupUploads, 60 * 60 * 1000);
+  // Clean up uploads every hour
+  setInterval(cleanupUploads, 60 * 60 * 1000);
+}
 
 // Start the server
 app.listen(port, () => {
   console.log(`SVG Color Converter server running at http://localhost:${port}`);
+  console.log(`Using upload directory: ${UPLOAD_DIR}`);
 });
