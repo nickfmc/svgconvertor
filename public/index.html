@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SVG Color Converter</title>
+    <link rel="stylesheet" href="css/styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>SVG Color Converter</h1>
+            <p>Convert hex colors in SVG files to currentColor</p>
+        </header>
+
+        <main>
+            <div class="upload-container">
+                <div class="tabs">
+                    <button class="tab-btn active" data-tab="single">Single File</button>
+                    <button class="tab-btn" data-tab="multiple">Multiple Files</button>
+                </div>
+                
+                <div class="tab-content active" id="single-tab">
+                    <form id="single-form" class="upload-form">
+                        <div class="dropzone" id="single-dropzone">
+                            <input type="file" id="single-file-input" accept=".svg" hidden>
+                            <div class="dropzone-content">
+                                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                    <polyline points="17 8 12 3 7 8"></polyline>
+                                    <line x1="12" y1="3" x2="12" y2="15"></line>
+                                </svg>
+                                <p>Drag & drop your SVG file here</p>
+                                <span>or</span>
+                                <button type="button" class="browse-btn" id="single-browse">Browse Files</button>
+                            </div>
+                            <div class="selected-file" id="single-selected-file"></div>
+                        </div>
+                        <button type="submit" class="convert-btn">Convert SVG</button>
+                    </form>
+                </div>
+                
+                <div class="tab-content" id="multiple-tab">
+                    <form id="multiple-form" class="upload-form">
+                        <div class="dropzone" id="multiple-dropzone">
+                            <input type="file" id="multiple-file-input" accept=".svg" multiple hidden>
+                            <div class="dropzone-content">
+                                <svg width="64" height="64" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+                                    <polyline points="17 8 12 3 7 8"></polyline>
+                                    <line x1="12" y1="3" x2="12" y2="15"></line>
+                                </svg>
+                                <p>Drag & drop multiple SVG files here</p>
+                                <span>or</span>
+                                <button type="button" class="browse-btn" id="multiple-browse">Browse Files</button>
+                            </div>
+                            <div class="selected-files" id="multiple-selected-files"></div>
+                        </div>
+                        <button type="submit" class="convert-btn">Convert SVGs</button>
+                    </form>
+                </div>
+            </div>
+
+            <div class="results-container" id="results-container" style="display: none;">
+                <h2>Converted SVGs</h2>
+                <div class="results-list" id="results-list"></div>
+                <div class="download-all-container">
+                    <button id="download-all" class="download-all-btn">Download All</button>
+                </div>
+            </div>
+        </main>
+
+        <footer>
+            <p>SVG Color Converter - Convert hex colors to currentColor</p>
+        </footer>
+    </div>
+
+    <script src="js/script.js"></script>
+</body>
+</html>
