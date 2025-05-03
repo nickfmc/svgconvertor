@@ -390,19 +390,50 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Download a file safely
-  function downloadFile(filepath) {
+  function downloadFile(filepath, originalName) {
     const filename = getFilenameFromPath(filepath);
     const downloadUrl = `/download/${filename}`;
     
     console.log(`Attempting to download file: ${filename} from ${downloadUrl}`);
     
-    // Create a hidden link and trigger download
-    const link = document.createElement('a');
-    link.href = downloadUrl;
-    link.download = `converted-${filename}`;
-    document.body.appendChild(link);
-    link.click();
-    document.body.removeChild(link);
+    // For Vercel, check if we have a data URL for this file
+    const fileData = convertedFiles.find(f => f.convertedPath === filepath);
+    if (fileData && fileData.svgDataUrl) {
+      console.log('Using data URL for direct download');
+      // Create object URL for the data
+      const link = document.createElement('a');
+      link.href = fileData.svgDataUrl;
+      link.download = originalName.replace('.svg', '-converted.svg');
+      document.body.appendChild(link);
+      link.click();
+      document.body.removeChild(link);
+      return;
+    }
+    
+    // Fall back to traditional download if no data URL
+    fetch(downloadUrl)
+      .then(response => {
+        if (response.ok) {
+          return response.blob();
+        } else {
+          throw new Error('File download failed');
+        }
+      })
+      .then(blob => {
+        // Create object URL for the blob
+        const url = window.URL.createObjectURL(blob);
+        const link = document.createElement('a');
+        link.href = url;
+        link.download = originalName.replace('.svg', '-converted.svg');
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        window.URL.revokeObjectURL(url);
+      })
+      .catch(error => {
+        console.error('Error downloading file:', error);
+        alert('Could not download the file. It may have been removed or expired.');
+      });
   }
 
   // Display the conversion results
@@ -427,7 +458,8 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.download-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         const filePath = btn.getAttribute('data-path');
-        downloadFile(filePath);
+        const originalName = btn.closest('.result-item').querySelector('.result-name').textContent;
+        downloadFile(filePath, originalName);
       });
     });
     

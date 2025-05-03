@@ -88,10 +88,15 @@ app.post('/convert/single', upload.single('svgFile'), async (req, res) => {
     const outputPath = path.join(UPLOAD_DIR, `converted-${path.basename(req.file.path)}`);
     await fs.writeFile(outputPath, convertedSvg);
     
-    // Return the converted SVG file path
+    // Return the converted SVG file information
+    // Include a raw data URL for direct access if on Vercel
+    const svgDataUrl = process.env.VERCEL ? 
+      `data:image/svg+xml;base64,${Buffer.from(convertedSvg).toString('base64')}` : null;
+    
     res.json({
       originalName: req.file.originalname,
-      convertedPath: path.basename(outputPath)
+      convertedPath: path.basename(outputPath),
+      svgDataUrl
     });
   } catch (error) {
     console.error('Error processing file:', error);
@@ -114,9 +119,14 @@ app.post('/convert/multiple', upload.array('svgFiles', 10), async (req, res) => 
         const outputPath = path.join(UPLOAD_DIR, `converted-${path.basename(file.path)}`);
         await fs.writeFile(outputPath, convertedSvg);
         
+        // Return SVG data URL when on Vercel
+        const svgDataUrl = process.env.VERCEL ? 
+          `data:image/svg+xml;base64,${Buffer.from(convertedSvg).toString('base64')}` : null;
+        
         return {
-          originalName: file.originalname,
-          convertedPath: path.basename(outputPath)
+          originalName: file.originalname, // Fix: Changed from originalName to originalname
+          convertedPath: path.basename(outputPath),
+          svgDataUrl
         };
       })
     );
