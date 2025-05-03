@@ -106,16 +106,107 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   });
 
-  // Download all converted files
-  downloadAllBtn.addEventListener('click', () => {
+  // Download all converted files as a ZIP
+  downloadAllBtn.addEventListener('click', async () => {
     if (convertedFiles.length === 0) {
       alert('No converted files to download');
       return;
     }
 
-    convertedFiles.forEach(file => {
-      window.open(`/download/${getFilenameFromPath(file.convertedPath)}`, '_blank');
-    });
+    // Show loading state
+    downloadAllBtn.disabled = true;
+    downloadAllBtn.innerHTML = '<span class="loading"></span> Creating ZIP...';
+
+    try {
+      // Track both original and converted file IDs for cleanup
+      const rawFileIds = [];
+      const fileIds = [];
+      
+      // Get file IDs for the ZIP and cleanup
+      convertedFiles.forEach(file => {
+        const filePath = file.convertedPath;
+        const fileName = getFilenameFromPath(filePath);
+        
+        // Store the actual filename (with converted- prefix)
+        fileIds.push(fileName);
+        
+        // Also store the original filename (without converted- prefix)
+        if (fileName.startsWith('converted-')) {
+          rawFileIds.push(fileName.substring(10)); // Remove 'converted-' prefix
+        }
+      });
+      
+      // Create query parameters with file IDs
+      let params = new URLSearchParams();
+      params.append('files', fileIds.join(','));
+      
+      // Add original filenames as parameters for better naming in the ZIP
+      convertedFiles.forEach(file => {
+        const fileId = getFilenameFromPath(file.convertedPath);
+        params.append(fileId, file.originalName);
+      });
+      
+      console.log('File IDs for ZIP:', fileIds);
+      
+      // Create the ZIP download URL
+      const downloadUrl = `/download-zip?${params.toString()}`;
+      console.log('Download URL:', downloadUrl);
+      
+      // Use fetch to initiate download
+      const response = await fetch(downloadUrl);
+      
+      if (!response.ok) {
+        throw new Error(`Server error: ${response.status} ${response.statusText}`);
+      }
+      
+      // Convert the response to a blob
+      const blob = await response.blob();
+      
+      // Create a URL for the blob
+      const url = window.URL.createObjectURL(blob);
+      
+      // Create a link to download the blob
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'converted-svgs.zip';
+      document.body.appendChild(link);
+      link.click();
+      
+      // Clean up
+      window.URL.revokeObjectURL(url);
+      document.body.removeChild(link);
+      
+      // Wait a bit to ensure download starts
+      await new Promise(resolve => setTimeout(resolve, 1000));
+      
+      // Combine both raw and converted IDs for complete cleanup
+      const allFileIds = [...rawFileIds, ...fileIds];
+      console.log('All file IDs for cleanup:', allFileIds);
+      
+      // Trigger cleanup endpoint with all file IDs
+      const cleanupResponse = await fetch('/cleanup', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ files: allFileIds })
+      });
+      
+      const cleanupResult = await cleanupResponse.json();
+      console.log('Cleanup result:', cleanupResult);
+      
+      // Clear results after download
+      convertedFiles = [];
+      resultsContainer.style.display = 'none';
+      resultsList.innerHTML = '';
+    } catch (error) {
+      console.error('Download error:', error);
+      alert(`Error downloading files: ${error.message}`);
+    } finally {
+      // Reset button state
+      downloadAllBtn.disabled = false;
+      downloadAllBtn.textContent = 'Download All as ZIP';
+    }
   });
 
   // Helper function to set up dropzones
@@ -292,6 +383,28 @@ document.addEventListener('DOMContentLoaded', () => {
     }
   }
 
+  // Extract filename from path
+  function getFilenameFromPath(path) {
+    // Handle both slash and backslash paths and get the last part
+    return path.split(/[/\\]/).pop();
+  }
+
+  // Download a file safely
+  function downloadFile(filepath) {
+    const filename = getFilenameFromPath(filepath);
+    const downloadUrl = `/download/${filename}`;
+    
+    console.log(`Attempting to download file: ${filename} from ${downloadUrl}`);
+    
+    // Create a hidden link and trigger download
+    const link = document.createElement('a');
+    link.href = downloadUrl;
+    link.download = `converted-${filename}`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }
+
   // Display the conversion results
   function displayResults(results) {
     resultsList.innerHTML = '';
@@ -314,16 +427,11 @@ document.addEventListener('DOMContentLoaded', () => {
     document.querySelectorAll('.download-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         const filePath = btn.getAttribute('data-path');
-        window.open(`/download/${getFilenameFromPath(filePath)}`, '_blank');
+        downloadFile(filePath);
       });
     });
     
     resultsContainer.style.display = 'block';
-  }
-
-  // Extract filename from path
-  function getFilenameFromPath(path) {
-    return path.split('/').pop();
   }
 
   // Show loading indicator
