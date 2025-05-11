@@ -20,7 +20,7 @@ document.addEventListener('DOMContentLoaded', () => {
   const downloadAllBtn = document.getElementById('download-all');
 
   // Global variables
-  let convertedFiles = [];
+  window.convertedFiles = [];
 
   // Tab switching
   tabBtns.forEach(btn => {
