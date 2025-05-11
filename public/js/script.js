@@ -60,6 +60,12 @@ document.addEventListener('DOMContentLoaded', () => {
 
   // Multiple files selection
   multipleFileInput.addEventListener('change', (e) => {
+    if (e.target.files.length > 50) {
+      alert('You can upload a maximum of 50 SVG files at once.');
+      multipleFileInput.value = '';
+      multipleSelectedFiles.innerHTML = '';
+      return;
+    }
     const files = e.target.files;
     if (files.length > 0) {
       displaySelectedFiles(files);
