@@ -6,6 +6,11 @@ const { parse, stringify } = require('svgson');
 const fs = require('fs-extra');
 const path = require('path');
 
+// List of standard CSS/SVG color names
+const COLOR_NAMES = [
+  'aliceblue','antiquewhite','aqua','aquamarine','azure','beige','bisque','black','blanchedalmond','blue','blueviolet','brown','burlywood','cadetblue','chartreuse','chocolate','coral','cornflowerblue','cornsilk','crimson','cyan','darkblue','darkcyan','darkgoldenrod','darkgray','darkgreen','darkgrey','darkkhaki','darkmagenta','darkolivegreen','darkorange','darkorchid','darkred','darksalmon','darkseagreen','darkslateblue','darkslategray','darkslategrey','darkturquoise','darkviolet','deeppink','deepskyblue','dimgray','dimgrey','dodgerblue','firebrick','floralwhite','forestgreen','fuchsia','gainsboro','ghostwhite','gold','goldenrod','gray','green','greenyellow','grey','honeydew','hotpink','indianred','indigo','ivory','khaki','lavender','lavenderblush','lawngreen','lemonchiffon','lightblue','lightcoral','lightcyan','lightgoldenrodyellow','lightgray','lightgreen','lightgrey','lightpink','lightsalmon','lightseagreen','lightskyblue','lightslategray','lightslategrey','lightsteelblue','lightyellow','lime','limegreen','linen','magenta','maroon','mediumaquamarine','mediumblue','mediumorchid','mediumpurple','mediumseagreen','mediumslateblue','mediumspringgreen','mediumturquoise','mediumvioletred','midnightblue','mintcream','mistyrose','moccasin','navajowhite','navy','oldlace','olive','olivedrab','orange','orangered','orchid','palegoldenrod','palegreen','paleturquoise','palevioletred','papayawhip','peachpuff','peru','pink','plum','powderblue','purple','rebeccapurple','red','rosybrown','royalblue','saddlebrown','salmon','sandybrown','seagreen','seashell','sienna','silver','skyblue','slateblue','slategray','slategrey','snow','springgreen','steelblue','tan','teal','thistle','tomato','turquoise','violet','wheat','white','whitesmoke','yellow','yellowgreen'
+];
+
 /**
  * Check if a string is a valid hex color
  * @param {string} str - String to check
@@ -13,6 +18,25 @@ const path = require('path');
  */
 function isHexColor(str) {
   return /^#([0-9A-F]{3}){1,2}$/i.test(str);
+}
+
+/**
+ * Check if a string is a valid named color
+ * @param {string} str - String to check
+ * @returns {boolean} - True if string is a valid named color
+ */
+function isNamedColor(str) {
+  if (typeof str !== 'string') return false;
+  return COLOR_NAMES.includes(str.trim().toLowerCase());
+}
+
+/**
+ * Check if a string is a color to replace
+ * @param {string} str - String to check
+ * @returns {boolean} - True if string is a color to replace
+ */
+function isColorToReplace(str) {
+  return isHexColor(str) || isNamedColor(str);
 }
 
 /**
@@ -24,20 +48,26 @@ function replaceColorsWithCurrentColor(node) {
   // Check if node has attributes
   if (node.attributes) {
     // Check for fill attribute
-    if (node.attributes.fill && isHexColor(node.attributes.fill)) {
+    if (node.attributes.fill && isColorToReplace(node.attributes.fill)) {
       node.attributes.fill = 'currentColor';
     }
     
     // Check for stroke attribute
-    if (node.attributes.stroke && isHexColor(node.attributes.stroke)) {
+    if (node.attributes.stroke && isColorToReplace(node.attributes.stroke)) {
       node.attributes.stroke = 'currentColor';
     }
     
     // Check for style attribute containing fill or stroke
     if (node.attributes.style) {
       node.attributes.style = node.attributes.style
-        .replace(/fill:\s*#([0-9A-F]{3,6})/gi, 'fill: currentColor')
-        .replace(/stroke:\s*#([0-9A-F]{3,6})/gi, 'stroke: currentColor');
+        // Replace hex and named colors for fill
+        .replace(/fill:\s*(#(?:[0-9A-F]{3}){1,2}|[a-zA-Z]+)/gi, (match, color) => {
+          return isColorToReplace(color) ? 'fill: currentColor' : match;
+        })
+        // Replace hex and named colors for stroke
+        .replace(/stroke:\s*(#(?:[0-9A-F]{3}){1,2}|[a-zA-Z]+)/gi, (match, color) => {
+          return isColorToReplace(color) ? 'stroke: currentColor' : match;
+        });
     }
   }
   
