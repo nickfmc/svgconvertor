@@ -105,7 +105,7 @@ app.post('/convert/single', upload.single('svgFile'), async (req, res) => {
 });
 
 // Multiple files upload route
-app.post('/convert/multiple', upload.array('svgFiles', 50), async (req, res) => {
+app.post('/convert/multiple', upload.array('svgFiles', 100), async (req, res) => {
   try {
     if (!req.files || req.files.length === 0) {
       return res.status(400).json({ error: 'No files uploaded' });
