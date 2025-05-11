@@ -86,10 +86,24 @@ function replaceColorsWithCurrentColor(node) {
  */
 async function convertSvg(svgContent) {
   try {
+    // Preprocess <style> blocks to replace fill/stroke color names and hex codes with currentColor
+    const styleRegex = /(<style[^>]*>)([\s\S]*?)(<\/style>)/gi;
+    svgContent = svgContent.replace(styleRegex, (match, startTag, cssContent, endTag) => {
+      // Replace fill and stroke declarations with hex or named colors
+      const replacedCss = cssContent
+        .replace(/(fill:)\s*(#(?:[0-9A-F]{3}){1,2}|[a-zA-Z]+)\s*;/gi, (m, prop, color) => {
+          return isColorToReplace(color) ? `${prop} currentColor;` : m;
+        })
+        .replace(/(stroke:)\s*(#(?:[0-9A-F]{3}){1,2}|[a-zA-Z]+)\s*;/gi, (m, prop, color) => {
+          return isColorToReplace(color) ? `${prop} currentColor;` : m;
+        });
+      return startTag + replacedCss + endTag;
+    });
+
     // Parse SVG to object
     const svgObj = await parse(svgContent);
     
-    // Replace colors with currentColor
+    // Replace colors with currentColor (inline and style attributes)
     const modifiedSvgObj = replaceColorsWithCurrentColor(svgObj);
     
     // Convert back to SVG string
