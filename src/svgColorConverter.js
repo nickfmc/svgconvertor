@@ -3,6 +3,7 @@
  * Converts hex color codes in SVG files to currentColor
  */
 const { parse, stringify } = require('svgson');
+const { cropSvgToBBox } = require('./svgCrop');
 const fs = require('fs-extra');
 const path = require('path');
 
@@ -84,7 +85,13 @@ function replaceColorsWithCurrentColor(node) {
  * @param {string} svgContent - Content of the SVG file
  * @returns {Promise<string>} - Modified SVG content
  */
-async function convertSvg(svgContent) {
+/**
+ * Convert a single SVG file (optionally crop canvas)
+ * @param {string} svgContent - Content of the SVG file
+ * @param {boolean} [crop=false] - Whether to crop canvas to content
+ * @returns {Promise<string>} - Modified SVG content
+ */
+async function convertSvg(svgContent, crop = false) {
   try {
     // Preprocess <style> blocks to replace fill/stroke color names and hex codes with currentColor
     const styleRegex = /(<style[^>]*>)([\s\S]*?)(<\/style>)/gi;
@@ -104,8 +111,11 @@ async function convertSvg(svgContent) {
     const svgObj = await parse(svgContent);
     
     // Replace colors with currentColor (inline and style attributes)
-    const modifiedSvgObj = replaceColorsWithCurrentColor(svgObj);
-    
+    let modifiedSvgObj = replaceColorsWithCurrentColor(svgObj);
+    // Optionally crop canvas
+    if (crop) {
+      modifiedSvgObj = cropSvgToBBox(modifiedSvgObj);
+    }
     // Convert back to SVG string
     return stringify(modifiedSvgObj);
   } catch (error) {

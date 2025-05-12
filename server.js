@@ -16,8 +16,8 @@ const os = require('os');
 const svgCache = new Map();
 
 // Modified convertSvg function that also caches results
-async function convertAndCacheSvg(svgContent, fileId) {
-  const convertedSvg = await convertSvg(svgContent);
+async function convertAndCacheSvg(svgContent, fileId, crop = false) {
+  const convertedSvg = await convertSvg(svgContent, crop);
   if (process.env.VERCEL) {
     // Store in cache with a unique key
     svgCache.set(fileId, {
@@ -81,8 +81,10 @@ app.post('/convert/single', upload.single('svgFile'), async (req, res) => {
     // Read the uploaded SVG file
     const svgContent = await fs.readFile(req.file.path, 'utf8');
     
+    // Check for crop option (form field)
+    const crop = req.body && (req.body.crop === '1' || req.body.crop === 'true');
     // Convert the SVG content and cache it
-    const convertedSvg = await convertAndCacheSvg(svgContent, req.file.filename);
+    const convertedSvg = await convertAndCacheSvg(svgContent, req.file.filename, crop);
     
     // Save the converted SVG
     const outputPath = path.join(UPLOAD_DIR, `converted-${path.basename(req.file.path)}`);
@@ -111,11 +113,13 @@ app.post('/convert/multiple', upload.array('svgFiles', 100), async (req, res) =>
       return res.status(400).json({ error: 'No files uploaded' });
     }
 
+    // Check for crop option (form field)
+    const crop = req.body && (req.body.crop === '1' || req.body.crop === 'true');
     // Process each uploaded file
     const results = await Promise.all(
       req.files.map(async (file) => {
         const svgContent = await fs.readFile(file.path, 'utf8');
-        const convertedSvg = await convertAndCacheSvg(svgContent, file.filename);
+        const convertedSvg = await convertAndCacheSvg(svgContent, file.filename, crop);
         const outputPath = path.join(UPLOAD_DIR, `converted-${path.basename(file.path)}`);
         await fs.writeFile(outputPath, convertedSvg);
         
@@ -124,7 +128,7 @@ app.post('/convert/multiple', upload.array('svgFiles', 100), async (req, res) =>
           `data:image/svg+xml;base64,${Buffer.from(convertedSvg).toString('base64')}` : null;
         
         return {
-          originalName: file.originalname, // Fix: Changed from originalName to originalname
+          originalName: file.originalname, 
           convertedPath: path.basename(outputPath),
           svgDataUrl
         };

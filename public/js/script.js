@@ -85,10 +85,10 @@ document.addEventListener('DOMContentLoaded', () => {
       alert('Please select an SVG file to convert');
       return;
     }
-
     try {
       const file = singleFileInput.files[0];
-      await convertSingleFile(file);
+      const crop = document.getElementById('single-crop-checkbox').checked;
+      await convertSingleFile(file, crop);
     } catch (error) {
       alert('Error converting file: ' + error.message);
       console.error('Error:', error);
@@ -102,10 +102,10 @@ document.addEventListener('DOMContentLoaded', () => {
       alert('Please select at least one SVG file to convert');
       return;
     }
-
     try {
       const files = multipleFileInput.files;
-      await convertMultipleFiles(files);
+      const crop = document.getElementById('multiple-crop-checkbox').checked;
+      await convertMultipleFiles(files, crop);
     } catch (error) {
       alert('Error converting files: ' + error.message);
       console.error('Error:', error);
@@ -331,9 +331,10 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Convert a single SVG file
-  async function convertSingleFile(file) {
+  async function convertSingleFile(file, crop) {
     const formData = new FormData();
     formData.append('svgFile', file);
+    if (crop) formData.append('crop', '1');
 
     showLoading();
 
@@ -358,7 +359,7 @@ document.addEventListener('DOMContentLoaded', () => {
   }
 
   // Convert multiple SVG files
-  async function convertMultipleFiles(files) {
+  async function convertMultipleFiles(files, crop) {
     const formData = new FormData();
     
     Array.from(files).forEach(file => {
@@ -366,6 +367,7 @@ document.addEventListener('DOMContentLoaded', () => {
         formData.append('svgFiles', file);
       }
     });
+    if (crop) formData.append('crop', '1');
 
     showLoading();
 
