@@ -95,8 +95,24 @@ function replaceColorsWithCurrentColor(node) {
  * @param {boolean} [crop=false] - Whether to crop canvas to content
  * @returns {Promise<string>} - Modified SVG content
  */
+/**
+ * Convert a single SVG file (optionally crop canvas, handle base64)
+ * @param {string} svgContent - Content of the SVG file (plain XML or base64 data URI)
+ * @param {boolean} [crop=false] - Whether to crop canvas to content
+ * @returns {Promise<string>} - Modified SVG content (same format as input)
+ */
 async function convertSvg(svgContent, crop = false) {
   try {
+    // --- Handle base64 data URI ---
+    let wasBase64 = false;
+    let prefix = '';
+    const base64Match = /^data:image\/svg\+xml(;charset=[^;,]+)?;base64,(.*)$/i.exec(svgContent.trim());
+    if (base64Match) {
+      wasBase64 = true;
+      prefix = base64Match[0].slice(0, base64Match[0].indexOf(',') + 1); // preserve any charset
+      svgContent = Buffer.from(base64Match[2], 'base64').toString('utf8');
+    }
+
     // Preprocess <style> blocks to replace fill/stroke color names and hex codes with currentColor
     const styleRegex = /(<style[^>]*>)([\s\S]*?)(<\/style>)/gi;
     svgContent = svgContent.replace(styleRegex, (match, startTag, cssContent, endTag) => {
@@ -121,7 +137,14 @@ async function convertSvg(svgContent, crop = false) {
       modifiedSvgObj = cropSvgToBBox(modifiedSvgObj);
     }
     // Convert back to SVG string
-    return stringify(modifiedSvgObj);
+    let result = stringify(modifiedSvgObj);
+    // If input was base64, re-encode as data URI
+    if (wasBase64) {
+      const b64 = Buffer.from(result, 'utf8').toString('base64');
+      // Use the same prefix as input, or a standard one
+      result = prefix ? prefix + b64 : 'data:image/svg+xml;base64,' + b64;
+    }
+    return result;
   } catch (error) {
     console.error('Error converting SVG:', error);
     throw error;
