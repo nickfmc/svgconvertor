@@ -21,6 +21,11 @@ function isHexColor(str) {
   return /^#([0-9A-F]{3}){1,2}$/i.test(str);
 }
 
+function isRgbColor(str) {
+  // Matches rgb(…), rgba(…), hsl(…), hsla(…) with numeric values
+  return /^(rgb|rgba|hsl|hsla)\s*\(([^)]+)\)$/i.test(str.trim());
+}
+
 /**
  * Check if a string is a valid named color
  * @param {string} str - String to check
@@ -37,7 +42,7 @@ function isNamedColor(str) {
  * @returns {boolean} - True if string is a color to replace
  */
 function isColorToReplace(str) {
-  return isHexColor(str) || isNamedColor(str);
+  return isHexColor(str) || isNamedColor(str) || isRgbColor(str);
 }
 
 /**
@@ -52,7 +57,6 @@ function replaceColorsWithCurrentColor(node) {
     if (node.attributes.fill && isColorToReplace(node.attributes.fill)) {
       node.attributes.fill = 'currentColor';
     }
-    
     // Check for stroke attribute
     if (node.attributes.stroke && isColorToReplace(node.attributes.stroke)) {
       node.attributes.stroke = 'currentColor';
@@ -61,13 +65,13 @@ function replaceColorsWithCurrentColor(node) {
     // Check for style attribute containing fill or stroke
     if (node.attributes.style) {
       node.attributes.style = node.attributes.style
-        // Replace hex and named colors for fill
-        .replace(/fill:\s*(#(?:[0-9A-F]{3}){1,2}|[a-zA-Z]+)/gi, (match, color) => {
-          return isColorToReplace(color) ? 'fill: currentColor' : match;
+        // Replace hex, named, and rgb/hsl colors for fill
+        .replace(/fill:\s*([^;]+);/gi, (match, color) => {
+          return isColorToReplace(color) ? 'fill: currentColor;' : match;
         })
-        // Replace hex and named colors for stroke
-        .replace(/stroke:\s*(#(?:[0-9A-F]{3}){1,2}|[a-zA-Z]+)/gi, (match, color) => {
-          return isColorToReplace(color) ? 'stroke: currentColor' : match;
+        // Replace hex, named, and rgb/hsl colors for stroke
+        .replace(/stroke:\s*([^;]+);/gi, (match, color) => {
+          return isColorToReplace(color) ? 'stroke: currentColor;' : match;
         });
     }
   }
@@ -96,12 +100,12 @@ async function convertSvg(svgContent, crop = false) {
     // Preprocess <style> blocks to replace fill/stroke color names and hex codes with currentColor
     const styleRegex = /(<style[^>]*>)([\s\S]*?)(<\/style>)/gi;
     svgContent = svgContent.replace(styleRegex, (match, startTag, cssContent, endTag) => {
-      // Replace fill and stroke declarations with hex or named colors
+      // Replace fill and stroke declarations with hex, named, and rgb/hsl colors
       const replacedCss = cssContent
-        .replace(/(fill:)\s*(#(?:[0-9A-F]{3}){1,2}|[a-zA-Z]+)\s*;/gi, (m, prop, color) => {
+        .replace(/(fill:)\s*([^;]+);/gi, (m, prop, color) => {
           return isColorToReplace(color) ? `${prop} currentColor;` : m;
         })
-        .replace(/(stroke:)\s*(#(?:[0-9A-F]{3}){1,2}|[a-zA-Z]+)\s*;/gi, (m, prop, color) => {
+        .replace(/(stroke:)\s*([^;]+);/gi, (m, prop, color) => {
           return isColorToReplace(color) ? `${prop} currentColor;` : m;
         });
       return startTag + replacedCss + endTag;
